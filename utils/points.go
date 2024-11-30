@@ -42,7 +42,8 @@ func PointsFromItemCount(receipt models.Receipt) int {
 }
 
 func PointsFromItemDescription(receipt models.Receipt) int {
-	// 6 points if the day in the purchase date is odd.
+	// If the trimmed length of the item description is a multiple of 3, multiply the price by 0.2 and round
+	// up to the nearest integer. The result is the number of points earned.
 	points := 0
 	for _, item := range receipt.Items {
 		descriptionLength := len(strings.TrimSpace(item.ShortDescription))
@@ -74,10 +75,11 @@ func PointsFromRetailerName(receipt models.Receipt) int {
 }
 
 func PointsFromPurchaseTime(receipt models.Receipt) int {
+	// 10 points if the time of purchase is after 2:00pm and before 4:00pm.
 	points := 0
 	purchaseTime := receipt.PurchaseTime
 	hour, _ := strconv.Atoi(purchaseTime[:2])
-	if hour >= 14 && hour < 16 {
+	if hour >= 14 && hour <= 16 {
 		points = points + 10
 	}
 	return points
