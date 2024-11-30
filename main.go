@@ -6,6 +6,8 @@ import (
 	"net/http"
 	models "receipts/models"
 	util "receipts/utils"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -50,6 +52,108 @@ func createReceipt(w http.ResponseWriter, r *http.Request) {
 
 	id := uuid.New().String()
 
+	// error checking
+	if len(receipt.Retailer) == 0 {
+		sendError(w, "RETAILER_NAME_REQUIRED", "Retailer name is required", nil)
+		return
+	}
+
+	_, timeParseErr := time.Parse("2006-01-02", receipt.PurchaseDate)
+	if timeParseErr != nil {
+		response := map[string]string{
+			"error": "Invalid purchase date. Please provide a valid date in YYYY-MM-DD format",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Check if purchaseDate is not in the future
+	purchaseDate, _ := time.Parse("2006-01-02", receipt.PurchaseDate)
+	if purchaseDate.After(time.Now()) {
+		response := map[string]string{
+			"error": "Purchase date cannot be in the future",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if len(receipt.PurchaseTime) == 0 {
+		response := map[string]string{
+			"error": "Purchase time is required",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Check if purchaseTime is in HH:MM format
+	_, purchaseTimeErr := time.Parse("15:04", receipt.PurchaseTime)
+	if purchaseTimeErr != nil {
+		response := map[string]string{
+			"error": "Invalid purchase time. Please provide a valid purchaseTime in HH:MM format",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	var totalCost float64
+	if len(receipt.Items) == 0 {
+		response := map[string]string{
+			"error": "At least one item is required",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	for index, item := range receipt.Items {
+		if len(item.ShortDescription) == 0 {
+			response := map[string]string{
+				"error": "Short description is required for all items",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Check if price is a valid float
+		_, priceErr := strconv.ParseFloat(item.Price, 64)
+		if priceErr != nil {
+			response := map[string]string{
+				// "error": "Unsupported price value provided for the item #" + (strconv.Itoa(index + 1)) + " " + "with description: " + item.ShortDescription,
+				"error": "Price for item #" + (strconv.Itoa(index + 1)) + " " + "with description: " + item.ShortDescription + " must be a string in decimal format without currency symbols (e.g., '4.99' not '$4.99')",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		price, _ := strconv.ParseFloat(item.Price, 64)
+		totalCost = totalCost + price
+	}
+
+	_, totalCostErr := strconv.ParseFloat(receipt.Total, 64)
+	if totalCostErr != nil {
+		response := map[string]string{
+			"error": "Invalid total cost provided",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Check if the total cost matches the provided total
+	providedTotal, _ := strconv.ParseFloat(receipt.Total, 64)
+	if totalCost != providedTotal {
+		response := map[string]string{
+			"error": "Total cost does not match the sum of item prices",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	// Store the receipt with its ID
 	receiptStore.Receipts[id] = receipt
 
@@ -68,7 +172,11 @@ func getReceipt(w http.ResponseWriter, r *http.Request) {
 
 	receipt, exists := receiptStore.Receipts[id]
 	if !exists {
-		http.Error(w, "Receipt not found", http.StatusNotFound)
+		response := map[string]string{
+			"error": "Receipt not found",
+		}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	points := util.PointsFromRetailerName(receipt)
