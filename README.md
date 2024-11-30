@@ -20,12 +20,18 @@ This is a REST API service that processes receipts and calculates points based o
 
 ### Using Docker
 
-1. Build the Docker image:
+1. Clone the repository:
+```bash
+git clone https://github.com/pillows/receipt-processor
+cd receipt-processor
+```
+
+2. Build the Docker image:
 ```bash
 docker build -t receipt-processor .
 ```
 
-2. Run the container:
+3. Run the container:
 ```bash
 docker run -p 8000:8000 receipt-processor
 ```
